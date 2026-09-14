@@ -1,0 +1,47 @@
+MULTI-AGENT OPTIONS PAPER TRADING REPORT
+Generated: 2026-09-14T00:19:26
+
+Signals reviewed: 6
+Approved opportunities: 1
+
+AMD 2026-10-16 170P — APPROVED
+  Composite: 81.3/100
+  Volume: 89.6 | Entry: 65.2 | Noise: 96.0 | Liquidity: 75.6
+  Entry zone: $4.06-$4.18
+  Max paper contracts: 1
+  Supervisor: Composite 81.3; hard filters PASS; portfolio risk PASS.
+
+NVDA 2026-10-16 195C — REJECTED
+  Composite: 79.6/100
+  Volume: 79.6 | Entry: 80.3 | Noise: 95.2 | Liquidity: 66.3
+  Entry zone: $4.44-$4.50
+  Max paper contracts: 0
+  Supervisor: Composite 79.6; hard filters PASS; portfolio risk PASS.
+
+SPY 2026-10-16 635P — REJECTED
+  Composite: 75.4/100
+  Volume: 81.3 | Entry: 60.2 | Noise: 92.0 | Liquidity: 70.1
+  Entry zone: $8.97-$9.31
+  Max paper contracts: 0
+  Supervisor: Composite 75.4; hard filters PASS; portfolio risk PASS.
+
+TSLA 2026-10-16 325C — REJECTED
+  Composite: 38.3/100
+  Volume: 48.3 | Entry: 37.9 | Noise: 49.5 | Liquidity: 17.5
+  Entry zone: $4.02-$4.18
+  Max paper contracts: 0
+  Supervisor: Composite 38.3; hard filters FAIL; portfolio risk PASS.
+
+AAPL 2026-10-16 235P — REJECTED
+  Composite: 29.5/100
+  Volume: 22.4 | Entry: 51.6 | Noise: 35.1 | Liquidity: 11.4
+  Entry zone: $3.50-$3.64
+  Max paper contracts: 0
+  Supervisor: Composite 29.5; hard filters FAIL; portfolio risk PASS.
+
+META 2026-10-16 620C — REJECTED
+  Composite: 22.3/100
+  Volume: 28.0 | Entry: 19.0 | Noise: 33.3 | Liquidity: 10.2
+  Entry zone: $15.21-$15.83
+  Max paper contracts: 0
+  Supervisor: Composite 22.3; hard filters FAIL; portfolio risk PASS.

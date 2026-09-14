@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-Agent Options Dashboard</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#131a2d; --panel2:#18213a; --text:#edf2ff; --muted:#9aa7c2; --good:#39d98a; --bad:#ff6b6b; --line:#27314d; --accent:#72a7ff; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1400px; margin:0 auto; padding:28px; }
+    .header { display:flex; justify-content:space-between; gap:20px; align-items:flex-start; margin-bottom:22px; }
+    h1 { margin:0; font-size:30px; letter-spacing:-.02em; }
+    .sub { color:var(--muted); margin-top:8px; }
+    .mode { background:#2d2442; color:#e9d5ff; border:1px solid #5f4b8b; padding:8px 12px; border-radius:999px; font-size:12px; font-weight:700; }
+    button { background:var(--accent); color:#071022; border:0; border-radius:10px; padding:11px 16px; font-weight:800; cursor:pointer; }
+    button:disabled { opacity:.55; cursor:wait; }
+    .toolbar { display:flex; gap:10px; align-items:center; margin:18px 0; }
+    .stamp { color:var(--muted); font-size:13px; }
+    .cards { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:18px 0 24px; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .metric { font-size:30px; font-weight:800; margin-top:6px; }
+    .label { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.08em; }
+    .section { background:var(--panel); border:1px solid var(--line); border-radius:14px; margin:18px 0; overflow:hidden; }
+    .section h2 { font-size:18px; margin:0; padding:18px 18px 0; }
+    .section p { color:var(--muted); margin:7px 18px 16px; font-size:13px; }
+    .tablewrap { overflow:auto; }
+    table { width:100%; border-collapse:collapse; min-width:1080px; }
+    th,td { padding:13px 14px; border-top:1px solid var(--line); text-align:left; font-size:13px; vertical-align:top; }
+    th { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.07em; background:#11182a; position:sticky; top:0; }
+    .pill { display:inline-block; border-radius:999px; padding:5px 8px; font-size:11px; font-weight:800; }
+    .approved { color:#071d12; background:var(--good); }
+    .rejected { color:#2b0808; background:var(--bad); }
+    .score { font-weight:800; font-variant-numeric: tabular-nums; }
+    .bar { height:7px; background:#26304b; border-radius:9px; overflow:hidden; width:90px; margin-top:5px; }
+    .fill { height:100%; background:var(--accent); }
+    details { color:var(--muted); }
+    details summary { color:var(--text); cursor:pointer; }
+    .empty { color:var(--muted); padding:18px; }
+    .footer { color:var(--muted); font-size:12px; margin:20px 0 10px; line-height:1.5; }
+    @media (max-width:850px){ .cards{grid-template-columns:repeat(2,1fr)} .header{flex-direction:column} .wrap{padding:18px} }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>Multi-Agent Options Dashboard</h1>
+      <div class="sub">Volume lead • Entry quality • Noise filter • Market depth • Supervisor</div>
+    </div>
+    <div class="mode">PAPER TRADING ONLY</div>
+  </div>
+
+  <div class="toolbar">
+    <button id="scanBtn" onclick="loadScan()">Run New Scan</button>
+    <span class="stamp" id="stamp">Loading…</span>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Contracts Reviewed</div><div class="metric" id="reviewed">—</div></div>
+    <div class="card"><div class="label">Approved</div><div class="metric" id="approved">—</div></div>
+    <div class="card"><div class="label">Rejected</div><div class="metric" id="rejected">—</div></div>
+    <div class="card"><div class="label">Best Score</div><div class="metric" id="best">—</div></div>
+  </div>
+
+  <div class="section">
+    <h2>Supervisor Queue</h2>
+    <p>Ranked by composite score. A trade is approved only if every specialist hard filter passes and the supervisor score clears the threshold.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Status</th><th>Contract</th><th>Composite</th><th>Volume</th><th>Entry</th><th>Noise</th><th>Depth</th><th>Spread</th><th>RVol</th><th>Entry Zone</th><th>Details</th></tr></thead>
+      <tbody id="signals"></tbody>
+    </table></div>
+  </div>
+
+  <div class="section">
+    <h2>Paper Positions</h2>
+    <p>These are simulated positions only. No brokerage orders are sent by this version.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Time</th><th>Symbol</th><th>Contract</th><th>Side</th><th>Contracts</th><th>Entry Range</th><th>Score</th><th>Status</th></tr></thead>
+      <tbody id="positions"></tbody>
+    </table></div>
+  </div>
+
+  <div class="footer">
+    Safety mode: simulated market data + paper ledger. This dashboard is an engineering/test environment, not investment advice and not a guarantee of profitability. Live data and order execution should be connected only after backtesting and paper validation.
+  </div>
+</div>
+<script>
+function scoreCell(v){ const n=Number(v).toFixed(1); return `<div class="score">${n}</div><div class="bar"><div class="fill" style="width:${Math.min(100,Math.max(0,v))}%"></div></div>` }
+function esc(s){ return String(s ?? '').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function loadScan(){
+  const btn=document.getElementById('scanBtn'); btn.disabled=true; btn.textContent='Scanning…';
+  try {
+    const r=await fetch('/api/scan'); const d=await r.json();
+    document.getElementById('reviewed').textContent=d.summary.reviewed;
+    document.getElementById('approved').textContent=d.summary.approved;
+    document.getElementById('rejected').textContent=d.summary.rejected;
+    document.getElementById('best').textContent=Number(d.summary.best_score).toFixed(1);
+    document.getElementById('stamp').textContent=`${d.mode} • ${d.generated_at}`;
+    const sig=document.getElementById('signals'); sig.innerHTML='';
+    d.signals.forEach(s=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`
+        <td><span class="pill ${s.approved?'approved':'rejected'}">${s.approved?'APPROVED':'REJECTED'}</span></td>
+        <td><b>${esc(s.contract)}</b><br><span style="color:var(--muted)">${esc(s.symbol)} @ $${Number(s.underlying_price).toFixed(2)}</span></td>
+        <td>${scoreCell(s.composite_score)}</td><td>${scoreCell(s.volume_score)}</td><td>${scoreCell(s.entry_score)}</td><td>${scoreCell(s.noise_score)}</td><td>${scoreCell(s.liquidity_score)}</td>
+        <td>${(Number(s.spread_pct)*100).toFixed(1)}%</td><td>${Number(s.relative_volume).toFixed(1)}x</td>
+        <td>$${Number(s.entry_low).toFixed(2)}–$${Number(s.entry_high).toFixed(2)}<br><span style="color:var(--muted)">max ${s.max_contracts} contracts</span></td>
+        <td><details><summary>Agent rationale</summary><div style="max-width:420px;line-height:1.55;margin-top:8px"><b>Volume:</b> ${esc(s.volume_rationale)}<br><b>Entry:</b> ${esc(s.entry_rationale)}<br><b>Noise:</b> ${esc(s.noise_rationale)}<br><b>Depth:</b> ${esc(s.liquidity_rationale)}<br><b>Supervisor:</b> ${esc(s.supervisor_rationale)}</div></details></td>`;
+      sig.appendChild(tr);
+    });
+    const pos=document.getElementById('positions'); pos.innerHTML='';
+    if(!d.paper_positions.length){ pos.innerHTML='<tr><td colspan="8" class="empty">No positions approved in this scan.</td></tr>'; }
+    d.paper_positions.forEach(p=>{
+      const tr=document.createElement('tr'); tr.innerHTML=`<td>${esc(p.timestamp)}</td><td>${esc(p.symbol)}</td><td>${esc(p.contract)}</td><td>${esc(p.side)}</td><td>${p.contracts}</td><td>$${Number(p.entry_low).toFixed(2)}–$${Number(p.entry_high).toFixed(2)}</td><td>${Number(p.score).toFixed(1)}</td><td>${esc(p.status)}</td>`; pos.appendChild(tr);
+    });
+  } catch(e){ document.getElementById('stamp').textContent='Could not load scan: '+e; }
+  finally { btn.disabled=false; btn.textContent='Run New Scan'; }
+}
+loadScan();
+</script>
+</body>
+</html>

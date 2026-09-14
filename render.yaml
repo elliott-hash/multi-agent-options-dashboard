@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: multi-agent-options-dashboard
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    autoDeploy: true
