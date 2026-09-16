@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import os
-import random
 import secrets
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +13,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
 from agents import VolumeLeadAgent, EntryAgent, NoiseFilterAgent, LiquidityDepthAgent, SupervisorAgent
-from data_source import SimulatedOptionsData
+from databento_source import DatabentoOptionsData
 from ledger import PaperLedger
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -22,7 +21,7 @@ STATIC_DIR = BASE_DIR / "static"
 OUTPUT_DIR = BASE_DIR / "output"
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-app = FastAPI(title="Multi-Agent Options Dashboard", version="2.0")
+app = FastAPI(title="Multi-Agent Options Dashboard", version="3.0-live-opra")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 security = HTTPBasic()
@@ -32,21 +31,15 @@ DASHBOARD_PASSWORD = os.getenv("DASHBOARD_PASSWORD")
 
 def require_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     if not DASHBOARD_USERNAME or not DASHBOARD_PASSWORD:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Dashboard authentication is not configured",
-        )
-
+        raise HTTPException(status_code=503, detail="Dashboard authentication is not configured")
     username_ok = secrets.compare_digest(credentials.username, DASHBOARD_USERNAME)
     password_ok = secrets.compare_digest(credentials.password, DASHBOARD_PASSWORD)
-
     if not (username_ok and password_ok):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Basic"},
         )
-
     return credentials.username
 
 
@@ -54,28 +47,17 @@ specialists = [VolumeLeadAgent(), EntryAgent(), NoiseFilterAgent(), LiquidityDep
 supervisor = SupervisorAgent()
 
 
-def run_scan(seed: int | None = None) -> dict[str, Any]:
-    if seed is None:
-        seed = random.randint(1, 1_000_000)
-
-    source = SimulatedOptionsData(seed=seed)
+def run_scan() -> dict[str, Any]:
+    source = DatabentoOptionsData()
     ledger = PaperLedger(output_dir=str(OUTPUT_DIR))
     signal_rows: list[dict[str, Any]] = []
-    decisions: list[dict[str, Any]] = []
 
     for snap in source.get_option_snapshots():
         results = [agent.evaluate(snap) for agent in specialists]
-        decision = supervisor.evaluate(
-            snap,
-            results,
-            ledger.open_positions,
-            ledger.modeled_daily_pnl,
-        )
-
+        decision = supervisor.evaluate(snap, results, ledger.open_positions, ledger.modeled_daily_pnl)
         score_map = {r.name: r.score for r in results}
         pass_map = {r.name: r.passed for r in results}
         rationale_map = {r.name: r.rationale for r in results}
-
         row = snap.as_dict()
         row.update({
             "volume_score": round(score_map["volume_lead"], 1),
@@ -94,36 +76,27 @@ def run_scan(seed: int | None = None) -> dict[str, Any]:
             "supervisor_rationale": decision.rationale,
             "volume_rationale": rationale_map["volume_lead"],
             "entry_rationale": rationale_map["entry"],
-            "noise_rationale": rationale_map["noise_filter"],
-            "liquidity_rationale": rationale_map["liquidity_depth"],
+            "noise_rationale": "LIVE OPRA: OI/IV/earnings enrichment not wired yet; auto-approval intentionally blocked. " + rationale_map["noise_filter"],
+            "liquidity_rationale": "LIVE OPRA NBBO/top size only; true multi-level depth unavailable in this feed. " + rationale_map["liquidity_depth"],
         })
-
         signal_rows.append(row)
-        decisions.append(row)
-
         if decision.approved:
             ledger.add_trade(snap, decision)
 
     signal_rows.sort(key=lambda x: x["composite_score"], reverse=True)
     approved = [r for r in signal_rows if r["approved"]]
-
     path = OUTPUT_DIR / "latest_scan.csv"
     if signal_rows:
         with path.open("w", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=signal_rows[0].keys())
-            writer.writeheader()
-            writer.writerows(signal_rows)
+            writer.writeheader(); writer.writerows(signal_rows)
 
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
-        "mode": "PAPER / SIMULATED DATA",
-        "seed": seed,
-        "summary": {
-            "reviewed": len(signal_rows),
-            "approved": len(approved),
-            "rejected": len(signal_rows) - len(approved),
-            "best_score": max((r["composite_score"] for r in signal_rows), default=0),
-        },
+        "mode": "LIVE OPRA DATA / PAPER EXECUTION",
+        "data_scope": os.getenv("SCAN_SYMBOLS", "AMD"),
+        "limitations": "OPRA TCBBO provides live trades + consolidated NBBO. Universal L2 depth, OI/IV enrichment, and underlying-price feed are not yet wired; supervisor auto-approval remains conservatively blocked.",
+        "summary": {"reviewed": len(signal_rows), "approved": len(approved), "rejected": len(signal_rows)-len(approved), "best_score": max((r["composite_score"] for r in signal_rows), default=0)},
         "signals": signal_rows,
         "paper_positions": ledger.positions,
     }
@@ -135,13 +108,13 @@ def home(_: str = Depends(require_auth)) -> HTMLResponse:
 
 
 @app.get("/api/scan")
-def api_scan(
-    seed: int | None = None,
-    _: str = Depends(require_auth),
-) -> JSONResponse:
-    return JSONResponse(run_scan(seed))
+def api_scan(_: str = Depends(require_auth)) -> JSONResponse:
+    try:
+        return JSONResponse(run_scan())
+    except Exception as exc:
+        return JSONResponse(status_code=503, content={"error": "Live OPRA scan failed", "detail": str(exc), "mode": "LIVE OPRA DATA / PAPER EXECUTION"})
 
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "mode": "paper"}
+    return {"status": "ok", "mode": "live-opra-paper", "databento_key": "configured" if os.getenv("DATABENTO_API_KEY") else "missing"}
